@@ -1,0 +1,46 @@
+RV32 LVGL dashboard validation
+
+Executed on the authoring host:
+- Real bundled LVGL 9.2.2 compiled and linked with the application.
+- Native tests passed: widget callbacks, keyboard MMIO events through the LVGL
+  group, switch activation, slider adjustment, typed note submission, bounded
+  log, monitor freeze/resume, allocator headroom, all three rendered tabs, and
+  an inactive-tab caption redraw regression.
+- Extended host tests passed: independent W/AW acceptance, response holding,
+  exactly-once FIFO pop under read backpressure, FIFO capacity/overflow, actuator
+  readback/clamping/acknowledgement, timer reads, byte strobes and VRAM counters.
+- Freestanding RV32IM/ILP32 firmware cross-compiled with GCC 13.2.0, -Os,
+  -mstrict-align, no libc, and compiler runtime helpers from libgcc.
+- Cleaned user RTL built with Verilator 5.020 in headless mode.
+- LVGL self-test executed on that RTL and returned firmware exit code zero.
+  Final run: 75,426,836 simulated cycles; firmware exit 0.
+  See lvgl_soc/validation/rv32-selftest.log for the recorded run.
+- SDL-enabled C++ host compiled with strict warnings and linked against SDL2.
+  A dummy-video SDL self-test run also passed (before the tab-caption redraw fix).
+- All application C files checked with -Wall -Wextra -Werror.
+- Build/run shell scripts passed bash syntax checks.
+- Native and actual RV32 framebuffer snapshots visually inspected.
+
+The local Verilator differs from the user's 5.032. The supplied verify script
+repeats the integration checks in the user's WSL environment. It does not edit
+source files or install software. The dedicated LVGL host supersedes baseline
+host behavior only when using Makefile.lvgl; the original files remain intact.
+
+Performance corrections applied before release:
+- Disabled LVGL's optional object-tree validation scans on each API call while
+  retaining null/allocation assertions.
+- The read-only log has a fixed application-side bound and uses bulk text
+  replacement instead of LVGL's costly max-length/per-character insertion path.
+- Explicit full-screen invalidation on tab changes fixes stale tab captions.
+
+Limits:
+- Live human keyboard interaction under the user's WSL window still needs the
+  guide's manual acceptance checks. Native tests do exercise queued keys through
+  the real LVGL input group.
+- A passing application test is not exhaustive RV32IM or AXI compliance.
+- Timer values reflect host wall time, not cycle-derived hardware time.
+- The actuator is a virtual register latch; no physical device is controlled.
+- Refresh targets are scheduling goals, not guaranteed frame rates.
+
+Final firmware size: playable text 254472 bytes; static data 4 bytes;
+BSS 147596 bytes. Self-test text 255604 bytes. All fit the original memory map.

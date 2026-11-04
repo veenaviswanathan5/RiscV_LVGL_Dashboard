@@ -1,0 +1,54 @@
+# Separate build: does not replace the baseline Makefile or host sources.
+CROSS ?= riscv64-unknown-elf-
+ROOT := $(CURDIR)
+SOC := lvgl_soc
+VENDOR := $(SOC)/vendor/lvgl
+BUILD := build_lvgl
+INCLUDES := -I$(SOC)/config -I$(SOC)/app -I$(VENDOR) -DLV_CONF_INCLUDE_SIMPLE
+LVSRCS := $(shell find $(VENDOR)/src -name '*.c' | sort)
+COMMON := $(SOC)/app/dashboard.c
+RVSRCS := $(LVSRCS) $(COMMON) $(SOC)/app/platform_rv32.c $(SOC)/app/runtime.c
+RVOBJS := $(patsubst %.c,$(BUILD)/rv/%.o,$(RVSRCS))
+HOSTOBJS := $(patsubst %.c,$(BUILD)/host/%.o,$(LVSRCS) $(COMMON))
+RVFLAGS := -march=rv32im -mabi=ilp32 -std=c11 -Os -g -ffreestanding -fno-builtin -fno-pic -fno-stack-protector -msmall-data-limit=0 -mstrict-align -ffunction-sections -fdata-sections $(INCLUDES)
+HOSTFLAGS := -std=c11 -O1 -g -ffunction-sections -fdata-sections $(INCLUDES)
+LD := -march=rv32im -mabi=ilp32 -nostdlib -nostartfiles -Wl,--gc-sections,--no-relax -T firmware/link.ld
+RTL := $(wildcard rtl/*.sv)
+.PHONY: all firmware native-test host-test emulator headless verify
+all: firmware emulator
+firmware: $(BUILD)/dashboard.bin $(BUILD)/dashboard_test.bin
+$(BUILD)/rv/%.o: %.c $(SOC)/config/lv_conf.h
+	@mkdir -p $(dir $@)
+	$(CROSS)gcc $(RVFLAGS) -MMD -MP -c $< -o $@
+$(BUILD)/host/%.o: %.c $(SOC)/config/lv_conf.h
+	@mkdir -p $(dir $@)
+	$(CC) $(HOSTFLAGS) -MMD -MP -c $< -o $@
+$(BUILD)/main.o: $(SOC)/app/main.c
+	@mkdir -p $(dir $@)
+	$(CROSS)gcc $(RVFLAGS) -c $< -o $@
+$(BUILD)/test_main.o: $(SOC)/app/main.c
+	@mkdir -p $(dir $@)
+	$(CROSS)gcc $(RVFLAGS) -DDASH_SELFTEST -c $< -o $@
+$(BUILD)/dashboard.elf: $(RVOBJS) $(BUILD)/main.o firmware/start.S firmware/link.ld
+	$(CROSS)gcc $(LD) firmware/start.S $(RVOBJS) $(BUILD)/main.o -Wl,-Map,$(@:.elf=.map) -lgcc -o $@
+	$(CROSS)size $@
+$(BUILD)/dashboard_test.elf: $(RVOBJS) $(BUILD)/test_main.o firmware/start.S firmware/link.ld
+	$(CROSS)gcc $(LD) firmware/start.S $(RVOBJS) $(BUILD)/test_main.o -Wl,-Map,$(@:.elf=.map) -lgcc -o $@
+	$(CROSS)size $@
+$(BUILD)/%.bin: $(BUILD)/%.elf
+	$(CROSS)objcopy -O binary $< $@
+$(BUILD)/native_test: $(HOSTOBJS) $(SOC)/tests/native_test.cpp
+	$(CXX) -std=c++17 -O1 -g $(INCLUDES) $(SOC)/tests/native_test.cpp $(HOSTOBJS) -Wl,--gc-sections -o $@
+native-test: $(BUILD)/native_test
+	./$(BUILD)/native_test $(BUILD)
+host-test:
+	@mkdir -p $(BUILD)
+	$(CXX) -std=c++17 -Wall -Wextra -Werror $(SOC)/tests/host_test.cpp -o $(BUILD)/host_test
+	./$(BUILD)/host_test
+emulator:
+	verilator --cc --exe --build -j 2 -Wall --top-module topCPU --Mdir obj_lvgl $(RTL) $(abspath $(SOC)/host/main.cpp) -CFLAGS "-O3 -std=c++17 $$(sdl2-config --cflags)" -LDFLAGS "$$(sdl2-config --libs)" -o rv_lvgl
+headless:
+	verilator --cc --exe --build -j 2 -Wall --top-module topCPU --Mdir obj_lvgl_headless $(RTL) $(abspath $(SOC)/host/main.cpp) -CFLAGS "-O3 -std=c++17 -DNO_SDL" -o rv_lvgl
+verify: native-test host-test firmware headless
+	./obj_lvgl_headless/rv_lvgl $(BUILD)/dashboard_test.bin --headless --cycles 500000000
+-include $(RVOBJS:.o=.d) $(HOSTOBJS:.o=.d)

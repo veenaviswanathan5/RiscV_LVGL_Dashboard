@@ -1,0 +1,14 @@
+# Build directories
+obj_dir/
+obj_headless/
+obj_lvgl/
+obj_lvgl_headless/
+build_lvgl/
+rtl_before_cleanup/
+
+# Archives
+*.tar.gz
+*.zip
+
+# Logs
+*.log

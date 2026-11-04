@@ -3,8 +3,7 @@
 A custom 32-bit RISC-V System-on-Chip (SoC) designed from scratch in SystemVerilog, demonstrating cycle-accurate hardware-software co-simulation. This project integrates a 5-stage pipelined RV32IM processor with an AXI4-Lite bus and memory-mapped peripherals to drive a bare-metal graphical user interface using the LVGL library.
 
 ## Project Demonstration
-
-
+https://github.com/user-attachments/assets/917ec47f-5067-4c86-9e15-a82cc04729c4
 
 ## Overview
 The goal of this project was to bridge low-level digital logic design with embedded C software engineering. Rather than running a standard operating system, the CPU directly executes bare-metal C firmware to render a 320x240 UI and process real-time inputs. The RTL is compiled using Verilator, wrapped in a C++ host, and connected to SDL2 for windowing and keyboard event dispatching on WSL2/Ubuntu.
